@@ -388,6 +388,65 @@ void TaskStringOut(void const * argument)
     }
   }
 }
+
+
+static void tcp_thread(void *arg)
+{
+  struct_out *qstruct;
+  err_t err, recv_err;
+  struct netconn *conn;
+  struct netbuf *inbuf;
+  struct netconn *newconn;
+  struct_sock *arg_sock;
+  arg_sock = (struct_sock*) arg;
+  conn = arg_sock->conn;
+  u16_t buflen;
+  char* buf;
+  //TFT_SetTextColor(LCD_COLOR_BLUE);
+  for(;;)
+  {
+    err = netconn_accept(conn, &newconn);
+    if (err == ERR_OK)
+    {
+      for(;;)
+      {
+        recv_err = netconn_recv(newconn, &inbuf);
+        if (recv_err == ERR_OK)
+        {
+          netbuf_data(inbuf, (void**)&buf, &buflen);
+          if((buf[0]==0x0D)||(buf[0]==0x0A))
+          {
+            netbuf_delete(inbuf);
+            continue;
+          }
+          qstruct->y_pos = arg_sock->y_pos;
+          strncpy(str_buf,buf,buflen);
+          str_buf[buflen]=0;
+          sprintf(qstruct->str,"%-20s", str_buf);
+          osMessageQueuePut(strout_Queue, &qstruct, 0, 0);
+          str_buf[buflen] = '\r';
+          str_buf[buflen+1] = '\n';
+          netconn_write(newconn, str_buf, buflen+2, NETCONN_COPY);
+          netbuf_delete(inbuf);
+        }
+        else
+        {
+          netbuf_delete(inbuf);
+          netconn_close(newconn);
+          break;
+
+        }
+      }
+    }
+    else
+    {
+      osDelay(1);
+    }
+  }
+
+
+}
+
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
@@ -402,6 +461,27 @@ void StartDefaultTask(void *argument)
   /* init code for LWIP */
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
+  struct netconn *conn;
+  err_t err;
+  sock01.y_pos = 60;
+  sock02.y_pos = 180;
+  conn = netconn_new(NETCONN_TCP);
+  if(conn!=NULL)
+  {
+    sock01.conn = conn;
+    sock02.conn = conn;
+    err = netconn_bind(conn, NULL, 80);
+    if (err == ERR_OK)
+    {
+      netconn_listen(conn);
+      sys_thread_new("tcp_thread1", tcp_thread, (void*)&sock01, DEFAULT_THREAD_STACKSIZE, osPriorityNormal );
+      sys_thread_new("tcp_thread2", tcp_thread, (void*)&sock02, DEFAULT_THREAD_STACKSIZE, osPriorityNormal );
+    }
+    else
+    {
+      netconn_delete(conn);
+    }
+  }
   /* Infinite loop */
   for(;;)
   {
