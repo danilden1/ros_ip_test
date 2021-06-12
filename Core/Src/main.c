@@ -56,15 +56,28 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 128 * 4,
+  .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+
+const osThreadAttr_t myString_attributes = {
+  .name = "myStringTask",
+  .stack_size = 2048 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
+
+const osMessageQueueAttr_t strout_Queue_attr = {
+    .name = "myQueue",
+};
+
+
+
 /* USER CODE BEGIN PV */
 #define LCD_FRAME_BUFFER SDRAM_DEVICE_ADDR
 char str1[60];
 char str_buf[1000]={'\0'};
 osThreadId TaskStringOutHandle;
-osMailQId strout_Queue;
+osMessageQueueId_t strout_Queue;
 typedef struct struct_sock_t {
   uint16_t y_pos;
   struct netconn *conn;
@@ -151,6 +164,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
+  strout_Queue = osMessageQueueNew(MAIL_SIZE, sizeof(struct_out), &strout_Queue_attr);
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
@@ -159,6 +173,7 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
+  TaskStringOutHandle = osThreadNew(TaskStringOut, NULL, &myString_attributes);
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -359,7 +374,20 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-
+void TaskStringOut(void const * argument)
+{
+  osEvent event;
+  struct_out *qstruct;
+  struct_out loc_struct_out;
+  for(;;)
+  {
+    if(osMessageQueueGet(strout_Queue, &loc_struct_out, 0, 2000)){
+      sprintf(str1,"%s", loc_struct_out.str);
+      //TFT_DisplayString(50, qstruct->y_pos, (uint8_t *)str1, LEFT_MODE);
+      printf(str1);
+    }
+  }
+}
 /* USER CODE END 4 */
 
 /* USER CODE BEGIN Header_StartDefaultTask */
