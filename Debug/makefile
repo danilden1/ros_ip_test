@@ -24,6 +24,7 @@ RM := rm -rf
 -include LWIP/Target/subdir.mk
 -include LWIP/App/subdir.mk
 -include Drivers/STM32F7xx_HAL_Driver/Src/subdir.mk
+-include Drivers/BSP/subdir.mk
 -include Core/Startup/subdir.mk
 -include Core/Src/subdir.mk
 -include subdir.mk

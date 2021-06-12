@@ -22,6 +22,7 @@ OBJCOPY_BIN :=
 SUBDIRS := \
 Core/Src \
 Core/Startup \
+Drivers/BSP \
 Drivers/STM32F7xx_HAL_Driver/Src \
 LWIP/App \
 LWIP/Target \
