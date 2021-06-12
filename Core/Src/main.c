@@ -65,6 +65,12 @@ const osThreadAttr_t myString_attributes = {
   .stack_size = 2048 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
+osThreadId_t TCP_TaskHandle;
+const osThreadAttr_t myTCP_attributes = {
+  .name = "myTCP_Task",
+  .stack_size = 2048 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 
 const osMessageQueueAttr_t strout_Queue_attr = {
     .name = "myQueue",
@@ -76,7 +82,7 @@ const osMessageQueueAttr_t strout_Queue_attr = {
 #define LCD_FRAME_BUFFER SDRAM_DEVICE_ADDR
 char str1[60];
 char str_buf[1000]={'\0'};
-osThreadId TaskStringOutHandle;
+osThreadId_t TaskStringOutHandle;
 osMessageQueueId_t strout_Queue;
 typedef struct struct_sock_t {
   uint16_t y_pos;
@@ -99,7 +105,7 @@ static void MX_USB_OTG_FS_PCD_Init(void);
 void StartDefaultTask(void *argument);
 
 /* USER CODE BEGIN PFP */
-void TaskStringOut(void const * argument);
+void TaskStringOut(void *argument);
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -374,8 +380,9 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void TaskStringOut(void const * argument)
+void TaskStringOut(void *argumentt)
 {
+  printf("TaskStringOut create \r\n");
   osEvent event;
   struct_out *qstruct;
   struct_out loc_struct_out;
@@ -390,15 +397,17 @@ void TaskStringOut(void const * argument)
 }
 
 
-static void tcp_thread(void *arg)
+static void tcp_thread(void *argument)
 {
+  printf("tcp_thread create \r\n");
   struct_out *qstruct;
+  struct_out loc_qstruct;
   err_t err, recv_err;
   struct netconn *conn;
   struct netbuf *inbuf;
   struct netconn *newconn;
   struct_sock *arg_sock;
-  arg_sock = (struct_sock*) arg;
+  arg_sock = (struct_sock*) argument;
   conn = arg_sock->conn;
   u16_t buflen;
   char* buf;
@@ -413,17 +422,18 @@ static void tcp_thread(void *arg)
         recv_err = netconn_recv(newconn, &inbuf);
         if (recv_err == ERR_OK)
         {
+
           netbuf_data(inbuf, (void**)&buf, &buflen);
           if((buf[0]==0x0D)||(buf[0]==0x0A))
           {
             netbuf_delete(inbuf);
             continue;
           }
-          qstruct->y_pos = arg_sock->y_pos;
+          loc_qstruct.y_pos = arg_sock->y_pos;
           strncpy(str_buf,buf,buflen);
           str_buf[buflen]=0;
-          sprintf(qstruct->str,"%-20s", str_buf);
-          osMessageQueuePut(strout_Queue, &qstruct, 0, 0);
+          sprintf(loc_qstruct.str,"%-20s", str_buf);
+          osMessageQueuePut(strout_Queue, &loc_qstruct, 0, 0);
           str_buf[buflen] = '\r';
           str_buf[buflen+1] = '\n';
           netconn_write(newconn, str_buf, buflen+2, NETCONN_COPY);
@@ -440,7 +450,8 @@ static void tcp_thread(void *arg)
     }
     else
     {
-      osDelay(1);
+      osDelay(1000);
+      printf("netconn_accept error %d", err);
     }
   }
 
@@ -474,8 +485,10 @@ void StartDefaultTask(void *argument)
     if (err == ERR_OK)
     {
       netconn_listen(conn);
-      sys_thread_new("tcp_thread1", tcp_thread, (void*)&sock01, DEFAULT_THREAD_STACKSIZE, osPriorityNormal );
-      sys_thread_new("tcp_thread2", tcp_thread, (void*)&sock02, DEFAULT_THREAD_STACKSIZE, osPriorityNormal );
+      printf("Trying to create TCP task \r\n");
+      TCP_TaskHandle = osThreadNew(tcp_thread, (void*)&sock01, &myTCP_attributes);
+      //sys_thread_new("tcp_thread1", tcp_thread, (void*)&sock01, DEFAULT_THREAD_STACKSIZE, osPriorityNormal );
+      //sys_thread_new("tcp_thread2", tcp_thread, (void*)&sock02, DEFAULT_THREAD_STACKSIZE, osPriorityNormal );
     }
     else
     {
