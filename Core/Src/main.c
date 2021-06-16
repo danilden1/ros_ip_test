@@ -56,45 +56,23 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 2048 * 4,
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-
-const osThreadAttr_t myString_attributes = {
-  .name = "myStringTask",
-  .stack_size = 2048 * 4,
+/* Definitions for myTask02 */
+osThreadId_t myTask02Handle;
+const osThreadAttr_t myTask02_attributes = {
+  .name = "myTask02",
+  .stack_size = 256 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
-osThreadId_t TCP_TaskHandle;
-const osThreadAttr_t myTCP_attributes = {
-  .name = "myTCP_Task",
-  .stack_size = 2048 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
-};
-
-const osMessageQueueAttr_t strout_Queue_attr = {
-    .name = "myQueue",
-};
-
-
-
 /* USER CODE BEGIN PV */
-#define LCD_FRAME_BUFFER SDRAM_DEVICE_ADDR
-char str1[60];
-char str_buf[1000]={'\0'};
-osThreadId_t TaskStringOutHandle;
-osMessageQueueId_t strout_Queue;
-typedef struct struct_sock_t {
-  uint16_t y_pos;
-  struct netconn *conn;
-} struct_sock;
-typedef struct struct_out_t {
-  uint32_t tick_count;
-  uint16_t y_pos;
-  char str[60];
-} struct_out;
-struct_sock sock01, sock02;
-#define MAIL_SIZE (uint32_t) 5
+osThreadId_t myNetTaskHandle;
+const osThreadAttr_t myNetTask_attributes = {
+  .name = "myNetTask",
+  .stack_size = 256 * 4,
+  .priority = (osPriority_t) osPriorityNormal,
+};
 /* USER CODE END PV */
 
 /* Private function prototypes -----------------------------------------------*/
@@ -103,9 +81,11 @@ static void MX_GPIO_Init(void);
 static void MX_USART3_UART_Init(void);
 static void MX_USB_OTG_FS_PCD_Init(void);
 void StartDefaultTask(void *argument);
+void StartTask02(void *argument);
 
 /* USER CODE BEGIN PFP */
-void TaskStringOut(void *argument);
+
+
 /* USER CODE END PFP */
 
 /* Private user code ---------------------------------------------------------*/
@@ -170,16 +150,19 @@ int main(void)
 
   /* USER CODE BEGIN RTOS_QUEUES */
   /* add queues, ... */
-  strout_Queue = osMessageQueueNew(MAIL_SIZE, sizeof(struct_out), &strout_Queue_attr);
+
   /* USER CODE END RTOS_QUEUES */
 
   /* Create the thread(s) */
   /* creation of defaultTask */
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
+  /* creation of myTask02 */
+  //myTask02Handle = osThreadNew(StartTask02, NULL, &myTask02_attributes);
+
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
-  TaskStringOutHandle = osThreadNew(TaskStringOut, NULL, &myString_attributes);
+
   /* USER CODE END RTOS_THREADS */
 
   /* USER CODE BEGIN RTOS_EVENTS */
@@ -380,83 +363,7 @@ static void MX_GPIO_Init(void)
 }
 
 /* USER CODE BEGIN 4 */
-void TaskStringOut(void *argumentt)
-{
-  printf("TaskStringOut create \r\n");
-  osEvent event;
-  struct_out *qstruct;
-  struct_out loc_struct_out;
-  for(;;)
-  {
-    if(osMessageQueueGet(strout_Queue, &loc_struct_out, 0, 2000)){
-      sprintf(str1,"%s", loc_struct_out.str);
-      //TFT_DisplayString(50, qstruct->y_pos, (uint8_t *)str1, LEFT_MODE);
-      printf(str1);
-    }
-  }
-}
 
-
-static void tcp_thread(void *argument)
-{
-  printf("tcp_thread create \r\n");
-  struct_out *qstruct;
-  struct_out loc_qstruct;
-  err_t err, recv_err;
-  struct netconn *conn;
-  struct netbuf *inbuf;
-  struct netconn *newconn;
-  struct_sock *arg_sock;
-  arg_sock = (struct_sock*) argument;
-  conn = arg_sock->conn;
-  u16_t buflen;
-  char* buf;
-  //TFT_SetTextColor(LCD_COLOR_BLUE);
-  for(;;)
-  {
-    err = netconn_accept(conn, &newconn);
-    if (err == ERR_OK)
-    {
-      for(;;)
-      {
-        recv_err = netconn_recv(newconn, &inbuf);
-        if (recv_err == ERR_OK)
-        {
-
-          netbuf_data(inbuf, (void**)&buf, &buflen);
-          if((buf[0]==0x0D)||(buf[0]==0x0A))
-          {
-            netbuf_delete(inbuf);
-            continue;
-          }
-          loc_qstruct.y_pos = arg_sock->y_pos;
-          strncpy(str_buf,buf,buflen);
-          str_buf[buflen]=0;
-          sprintf(loc_qstruct.str,"%-20s", str_buf);
-          osMessageQueuePut(strout_Queue, &loc_qstruct, 0, 0);
-          str_buf[buflen] = '\r';
-          str_buf[buflen+1] = '\n';
-          netconn_write(newconn, str_buf, buflen+2, NETCONN_COPY);
-          netbuf_delete(inbuf);
-        }
-        else
-        {
-          netbuf_delete(inbuf);
-          netconn_close(newconn);
-          break;
-
-        }
-      }
-    }
-    else
-    {
-      osDelay(1000);
-      printf("netconn_accept error %d", err);
-    }
-  }
-
-
-}
 
 /* USER CODE END 4 */
 
@@ -472,36 +379,141 @@ void StartDefaultTask(void *argument)
   /* init code for LWIP */
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
-  struct netconn *conn;
-  err_t err;
-  sock01.y_pos = 60;
-  sock02.y_pos = 180;
-  conn = netconn_new(NETCONN_TCP);
-  if(conn!=NULL)
+  struct netconn * nc;
+  struct netconn * in_nc;
+  struct netbuf * nb;
+  volatile err_t res;
+  uint16_t len;
+  ip_addr_t local_ip;
+  ip_addr_t remote_ip;
+  char * buffer = pvPortMalloc(2048);
+
+
+  printf("Hellow WorlD!\r\n");
+  printf("LWIP init complete!\r\n");
+  while(gnetif.ip_addr.addr == 0) osDelay(1);
+  printf("DHCP worked! IP: %s\r\n",ip4addr_ntoa(&gnetif.ip_addr));
+  local_ip = gnetif.ip_addr;
+  ip4addr_aton("169.254.238.254", &remote_ip);
+
+  nc = netconn_new(NETCONN_TCP);
+  if(nc == NULL)
   {
-    sock01.conn = conn;
-    sock02.conn = conn;
-    err = netconn_bind(conn, NULL, 80);
-    if (err == ERR_OK)
-    {
-      netconn_listen(conn);
-      printf("Trying to create TCP task \r\n");
-      TCP_TaskHandle = osThreadNew(tcp_thread, (void*)&sock01, &myTCP_attributes);
-      //sys_thread_new("tcp_thread1", tcp_thread, (void*)&sock01, DEFAULT_THREAD_STACKSIZE, osPriorityNormal );
-      //sys_thread_new("tcp_thread2", tcp_thread, (void*)&sock02, DEFAULT_THREAD_STACKSIZE, osPriorityNormal );
-    }
-    else
-    {
-      netconn_delete(conn);
-    }
+    printf("new error\r\n");
+    while(1) osDelay(1);
   }
+
+  res = netconn_bind(nc, &local_ip, 0);
+  if(res != 0)
+  {
+    printf("bind error: %d\r\n",res);
+    while(1) osDelay(1);
+  }
+
+  res = netconn_connect(nc, &remote_ip, 16);
+  if(res != 0)
+  {
+    printf("connect error: %d\r\n",res);
+    while(1) osDelay(1);
+  }
+
+  sprintf(buffer, "\r\n");
+  res = netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
+  if(res != 0)
+  {
+    printf("write error: %d\r\n",res);
+    while(1) osDelay(1);
+  }
+
+  res = netconn_recv(nc, &nb);
+  if(res != 0)
+  {
+    printf("recv error: %d\r\n",res);
+    while(1) osDelay(1);
+  }
+
+  len = netbuf_len(nb);
+  netbuf_copy(nb, buffer, len);
+  netbuf_delete(nb);
+  buffer[len] = 0;
+  printf("Received %d bytes:\r\n%s\r\n",len,buffer);
+  netconn_close(nc);
+  netconn_delete(nc);
+
+  printf("Client sequence completed successful!\r\n");
+
+  nc = netconn_new(NETCONN_TCP);
+  if(nc == NULL)
+  {
+    printf("new error: %d\r\n",res);
+    while(1) osDelay(1);
+  }
+
+
+  res = netconn_bind(nc, IP_ADDR_ANY, 81);
+  if(res != 0)
+  {
+    printf("bind error: %d\r\n",res);
+    while(1) osDelay(1);
+  }
+
+
+  res = netconn_listen(nc);
+  if(res != 0)
+  {
+    printf("listen error: %d\r\n",res);
+    while(1) osDelay(1);
+  }
+
+
   /* Infinite loop */
   for(;;)
   {
-    printf("DHCP worked! IP: %s\r\n",ip4addr_ntoa(&gnetif.ip_addr));
-    osDelay(1000);
+    res = netconn_accept(nc, &in_nc);
+    if(res != 0)
+    {
+      printf("listen error: %d\r\n",res);
+    }
+    else
+    {
+
+      myNetTaskHandle = osThreadNew(StartTask02, (void*)in_nc, &myNetTask_attributes);
+
+    }
   }
   /* USER CODE END 5 */
+}
+
+/* USER CODE BEGIN Header_StartTask02 */
+/**
+* @brief Function implementing the myTask02 thread.
+* @param argument: Not used
+* @retval None
+*/
+/* USER CODE END Header_StartTask02 */
+void StartTask02(void *argument)
+{
+  /* USER CODE BEGIN StartTask02 */
+  struct netconn * nc = (struct netconn *)argument;
+  struct netbuf * nb;
+  char * buffer = pvPortMalloc(2048);
+  uint16_t len;
+  printf("Incoming connection\r\n");
+
+  sprintf(buffer, "Hello from STM32F746BGT6!\r\n");
+  netconn_write(nc,buffer,strlen(buffer), NETCONN_COPY);
+
+  /* Infinite loop */
+  for(;;)
+  {
+    netconn_recv(nc, &nb);
+    len = netbuf_len(nb);
+    netbuf_copy(nb, buffer, len);
+    netbuf_delete(nb);
+    buffer[len] = 0;
+    printf("%s",buffer);
+  }
+  /* USER CODE END StartTask02 */
 }
 
  /**
