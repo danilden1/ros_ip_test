@@ -56,15 +56,15 @@ PCD_HandleTypeDef hpcd_USB_OTG_FS;
 osThreadId_t defaultTaskHandle;
 const osThreadAttr_t defaultTask_attributes = {
   .name = "defaultTask",
-  .stack_size = 256 * 4,
+  .stack_size = 512 * 4,
   .priority = (osPriority_t) osPriorityNormal,
 };
 /* Definitions for myTask02 */
 osThreadId_t myTask02Handle;
 const osThreadAttr_t myTask02_attributes = {
   .name = "myTask02",
-  .stack_size = 256 * 4,
-  .priority = (osPriority_t) osPriorityNormal,
+  .stack_size = 512 * 4,
+  .priority = (osPriority_t) osPriorityLow,
 };
 /* USER CODE BEGIN PV */
 osThreadId_t myNetTaskHandle;
@@ -158,7 +158,7 @@ int main(void)
   defaultTaskHandle = osThreadNew(StartDefaultTask, NULL, &defaultTask_attributes);
 
   /* creation of myTask02 */
-  //myTask02Handle = osThreadNew(StartTask02, NULL, &myTask02_attributes);
+  myTask02Handle = osThreadNew(StartTask02, NULL, &myTask02_attributes);
 
   /* USER CODE BEGIN RTOS_THREADS */
   /* add threads, ... */
@@ -380,74 +380,64 @@ void StartDefaultTask(void *argument)
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
   //192.168.1.192
-  struct netconn * nc;
-  struct netconn * in_nc;
-  struct netconn *newconn;
-  struct netbuf * nb;
-  struct netbuf *buf;
-  volatile err_t res;
-  void *data;
-  uint16_t len;
-  ip_addr_t local_ip;
-  ip_addr_t remote_ip;
-  char * buffer = pvPortMalloc(2048);
 
+    struct netconn *conn, *newconn;
+    err_t err, accept_err;
+    struct netbuf *buf;
+    void *data;
+    u16_t len;
 
-  printf("Hellow WorlD!\r\n");
-  printf("LWIP init complete!\r\n");
-  while(gnetif.ip_addr.addr == 0) osDelay(1);
-  printf("DHCP worked! IP: %s\r\n",ip4addr_ntoa(&gnetif.ip_addr));
-  local_ip = gnetif.ip_addr;
-  ip4addr_aton("169.254.238.254", &remote_ip);
+    LWIP_UNUSED_ARG(argument);
+    //while(gnetif.ip_addr.addr == 0) osDelay(1);
+   printf("DHCP worked! IP: %s\r\n",ip4addr_ntoa(&gnetif.ip_addr));
+    /* Create a new connection identifier. */
+    conn = netconn_new(NETCONN_TCP);
 
-  nc = netconn_new(NETCONN_TCP);
-  if(nc == NULL)
-  {
-    printf("new error\r\n");
-    while(1) osDelay(1);
-  }
-
-  res = netconn_bind(nc, &local_ip, 0);
-  if(res != 0)
-  {
-    printf("bind error: %d\r\n",res);
-    while(1) osDelay(1);
-  }
-
-  netconn_listen(nc);
-  /* Infinite loop */
-  for(;;)
-  {
-    /* Grab new connection. */
-    res = netconn_accept(nc, &newconn);
-
-    /* Process the new connection. */
-    if (res == ERR_OK)
+    if (conn!=NULL)
     {
+      /* Bind connection to well known port number 7. */
+      err = netconn_bind(conn, NULL, 7);
 
-      while (netconn_recv(newconn, &buf) == ERR_OK)
+      if (err == ERR_OK)
       {
-        do
+        /* Tell connection to go into listening mode. */
+        netconn_listen(conn);
+        printf("DHCP worked! IP: %s\r\n",ip4addr_ntoa(&gnetif.ip_addr));
+        while (1)
         {
-          netbuf_data(buf, &data, &len);
-          printf(buf);
-          netconn_write(newconn, data, len, NETCONN_COPY);
+          /* Grab new connection. */
+           accept_err = netconn_accept(conn, &newconn);
 
+          /* Process the new connection. */
+          if (accept_err == ERR_OK)
+          {
+
+            while (netconn_recv(newconn, &buf) == ERR_OK)
+            {
+              do
+              {
+                netbuf_data(buf, &data, &len);
+                printf(buf);
+                netconn_write(newconn, data, len, NETCONN_COPY);
+
+              }
+              while (netbuf_next(buf) >= 0);
+
+              netbuf_delete(buf);
+            }
+
+            /* Close connection and discard connection identifier. */
+            netconn_close(newconn);
+            netconn_delete(newconn);
+          }
         }
-        while (netbuf_next(buf) >= 0);
-
-        netbuf_delete(buf);
       }
-
-      /* Close connection and discard connection identifier. */
-      netconn_close(newconn);
-      netconn_delete(newconn);
+      else
+      {
+        netconn_delete(newconn);
+      }
     }
 
-      //myNetTaskHandle = osThreadNew(StartTask02, (void*)in_nc, &myNetTask_attributes);
-
-
-  }
   /* USER CODE END 5 */
 }
 
@@ -473,12 +463,8 @@ void StartTask02(void *argument)
   /* Infinite loop */
   for(;;)
   {
-    netconn_recv(nc, &nb);
-    len = netbuf_len(nb);
-    netbuf_copy(nb, buffer, len);
-    netbuf_delete(nb);
-    buffer[len] = 0;
-    printf("%s",buffer);
+    printf("DHCP worked! IP: %s\r\n",ip4addr_ntoa(&gnetif.ip_addr));
+    osDelay(500);
   }
   /* USER CODE END StartTask02 */
 }
