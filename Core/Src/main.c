@@ -379,10 +379,14 @@ void StartDefaultTask(void *argument)
   /* init code for LWIP */
   MX_LWIP_Init();
   /* USER CODE BEGIN 5 */
+  //192.168.1.192
   struct netconn * nc;
   struct netconn * in_nc;
+  struct netconn *newconn;
   struct netbuf * nb;
+  struct netbuf *buf;
   volatile err_t res;
+  void *data;
   uint16_t len;
   ip_addr_t local_ip;
   ip_addr_t remote_ip;
@@ -410,76 +414,39 @@ void StartDefaultTask(void *argument)
     while(1) osDelay(1);
   }
 
-  res = netconn_connect(nc, &remote_ip, 16);
-  if(res != 0)
-  {
-    printf("connect error: %d\r\n",res);
-    while(1) osDelay(1);
-  }
-
-  sprintf(buffer, "\r\n");
-  res = netconn_write(nc, buffer, strlen(buffer), NETCONN_COPY);
-  if(res != 0)
-  {
-    printf("write error: %d\r\n",res);
-    while(1) osDelay(1);
-  }
-
-  res = netconn_recv(nc, &nb);
-  if(res != 0)
-  {
-    printf("recv error: %d\r\n",res);
-    while(1) osDelay(1);
-  }
-
-  len = netbuf_len(nb);
-  netbuf_copy(nb, buffer, len);
-  netbuf_delete(nb);
-  buffer[len] = 0;
-  printf("Received %d bytes:\r\n%s\r\n",len,buffer);
-  netconn_close(nc);
-  netconn_delete(nc);
-
-  printf("Client sequence completed successful!\r\n");
-
-  nc = netconn_new(NETCONN_TCP);
-  if(nc == NULL)
-  {
-    printf("new error: %d\r\n",res);
-    while(1) osDelay(1);
-  }
-
-
-  res = netconn_bind(nc, IP_ADDR_ANY, 81);
-  if(res != 0)
-  {
-    printf("bind error: %d\r\n",res);
-    while(1) osDelay(1);
-  }
-
-
-  res = netconn_listen(nc);
-  if(res != 0)
-  {
-    printf("listen error: %d\r\n",res);
-    while(1) osDelay(1);
-  }
-
-
+  netconn_listen(nc);
   /* Infinite loop */
   for(;;)
   {
-    res = netconn_accept(nc, &in_nc);
-    if(res != 0)
-    {
-      printf("listen error: %d\r\n",res);
-    }
-    else
+    /* Grab new connection. */
+    res = netconn_accept(nc, &newconn);
+
+    /* Process the new connection. */
+    if (res == ERR_OK)
     {
 
-      myNetTaskHandle = osThreadNew(StartTask02, (void*)in_nc, &myNetTask_attributes);
+      while (netconn_recv(newconn, &buf) == ERR_OK)
+      {
+        do
+        {
+          netbuf_data(buf, &data, &len);
+          printf(buf);
+          netconn_write(newconn, data, len, NETCONN_COPY);
 
+        }
+        while (netbuf_next(buf) >= 0);
+
+        netbuf_delete(buf);
+      }
+
+      /* Close connection and discard connection identifier. */
+      netconn_close(newconn);
+      netconn_delete(newconn);
     }
+
+      //myNetTaskHandle = osThreadNew(StartTask02, (void*)in_nc, &myNetTask_attributes);
+
+
   }
   /* USER CODE END 5 */
 }
