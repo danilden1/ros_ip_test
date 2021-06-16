@@ -417,7 +417,7 @@ void StartDefaultTask(void *argument)
               do
               {
                 netbuf_data(buf, &data, &len);
-                printf(buf);
+                printf(data);
                 netconn_write(newconn, data, len, NETCONN_COPY);
 
               }

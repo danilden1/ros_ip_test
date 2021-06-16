@@ -1277,8 +1277,8 @@ void StartDefaultTask(void *argument)
  8000acc:	f107 010c 	add.w	r1, r7, #12
  8000ad0:	4618      	mov	r0, r3
  8000ad2:	f00b fbb3 	bl	800c23c <netbuf_data>
-                printf(buf);
- 8000ad6:	693b      	ldr	r3, [r7, #16]
+                printf(data);
+ 8000ad6:	68fb      	ldr	r3, [r7, #12]
  8000ad8:	4618      	mov	r0, r3
  8000ada:	f016 fe97 	bl	801780c <iprintf>
                 netconn_write(newconn, data, len, NETCONN_COPY);
